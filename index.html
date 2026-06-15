@@ -31,7 +31,7 @@
   <div id="progress">進捗: 0行目</div>
 
 <script>
-// UUID設定
+// UUID
 const SERVICE_UUID = '0000ffa0-0000-1000-8000-00805f9b34fb';
 const CHAR_UUID = '0000ffa1-0000-1000-8000-00805f9b34fb';
 
@@ -40,7 +40,7 @@ let characteristic = null;
 let isPlaying = false;
 let playbackInterval = null;
 
-// コマンド定義
+// コマンド
 const COMMANDS = {
   stop: new Uint8Array([0xA0, 0x06, 0x00, 0x00, 0x00, 0x01]),
   level1: new Uint8Array([0xA0, 0x06, 0x01, 0x00, 0x0B, 0x01]),
@@ -85,6 +85,7 @@ function sendStop() {
   if (isPlaying) stopPlayback();
 }
 
+// CSV再生（強化版）
 async function startCSV() {
   const fileInput = document.getElementById('csvFile');
   if (!fileInput.files[0]) return alert('CSVファイルを選択してください');
@@ -100,20 +101,25 @@ async function startCSV() {
       stopPlayback();
       return;
     }
-    const cols = lines[index].split(',').map(n => parseFloat(n));
+
+    const cols = lines[index].split(',').map(n => parseFloat(n.trim()));
     if (cols.length >= 2) {
-      const value = cols[1];
+      const position = cols[1];   // 2列目（0〜200）
+
+      // 位置 → レベル変換（あなたのオナホに合わせて調整）
       let level = 1;
-      if (value >= 160) level = 3;      // 160 → レベル3（速め）
-      else if (value >= 100) level = 2;
-      else if (value >= 60) level = 2;
-      // 40付近はレベル1（普通）
+      if (position >= 170) level = 5;
+      else if (position >= 140) level = 4;
+      else if (position >= 100) level = 3;
+      else if (position >= 60) level = 2;
+      // 60未満はレベル1（普通）
 
       sendLevel(level);
-      document.getElementById('progress').textContent = `進捗: ${index+1}/${lines.length}行目 (レベル${level})`;
+      document.getElementById('progress').textContent = 
+        `進捗: ${index+1}/${lines.length}行目 (位置:${position} → レベル${level})`;
     }
     index++;
-  }, 700); // 0.7秒間隔（調整可能）
+  }, 650); // 0.65秒間隔（3列目の持続時間に合わせて調整してください）
 }
 
 function stopPlayback() {
