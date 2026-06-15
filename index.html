@@ -2,60 +2,24 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>オナホコントローラー</title>
-<style>
-  body { font-family: system-ui; text-align: center; padding: 20px; background: #111; color: #fff; }
-  button { padding: 15px 25px; margin: 8px; font-size: 18px; border-radius: 12px; }
-  .level { background: #0066ff; color: white; }
-  .stop { background: #ff0000; color: white; }
-  #status { margin: 20px; font-size: 18px; }
-</style>
+<title>接続テスト</title>
+<style>body {font-family: system-ui; text-align:center; padding:50px; background:#111; color:#fff;}</style>
 </head>
 <body>
-  <h1>電動オナホ コントローラー</h1>
-  <button onclick="connectDevice()">🔗 Bluetooth接続</button>
-  <div id="status">未接続</div>
-
-  <h2>手動コントロール（レベル）</h2>
-  <button class="level" onclick="sendLevel(1)">レベル 1</button>
-  <button class="level" onclick="sendLevel(2)">レベル 2</button>
-  <button class="level" onclick="sendLevel(3)">レベル 3</button>
-  <button class="level" onclick="sendLevel(4)">レベル 4</button>
-  <button class="level" onclick="sendLevel(5)">レベル 5（最大）</button>
-  <button class="stop" onclick="sendStop()">⛔ 停止</button>
-
-  <h2>細かい速度調整（10刻み）</h2>
-  <input type="range" id="speedSlider" min="0" max="255" value="50" step="10" oninput="updateSlider()">
-  <div>速度: <span id="speedValue">50</span></div>
-  <button onclick="sendCurrentSlider()">この速度で送信</button>
-
-  <h2>CSV自動再生</h2>
-  <input type="file" id="csvFile" accept=".csv">
-  <button onclick="startCSV()">▶️ スタート</button>
-  <button onclick="stopPlayback()">⛔ 停止</button>
-  <div id="progress">進捗: 0行目</div>
+  <h1>Bluetooth接続テスト</h1>
+  <button onclick="connectDevice()" style="padding:20px 40px; font-size:20px;">🔗 接続する</button>
+  <div id="status" style="margin-top:30px; font-size:18px;">未接続</div>
 
 <script>
-// UUID
 const SERVICE_UUID = '0000ffa0-0000-1000-8000-00805f9b34fb';
 const CHAR_UUID = '0000ffa1-0000-1000-8000-00805f9b34fb';
 
 let device = null;
 let characteristic = null;
-let isPlaying = false;
-let playbackInterval = null;
-
-// 基本コマンド
-const COMMANDS = {
-  stop: new Uint8Array([0xA0, 0x06, 0x00, 0x00, 0x00, 0x01]),
-  level1: new Uint8Array([0xA0, 0x06, 0x01, 0x00, 0x0B, 0x01]),
-  level2: new Uint8Array([0xA0, 0x06, 0x01, 0x00, 0x0C, 0x01]),
-  level3: new Uint8Array([0xA0, 0x06, 0x01, 0x00, 0x0D, 0x01]),
-  level4: new Uint8Array([0xA0, 0x06, 0x01, 0x00, 0x0E, 0x01]),
-  level5: new Uint8Array([0xA0, 0x06, 0x01, 0x00, 0x0F, 0x01])
-};
 
 async function connectDevice() {
+  const status = document.getElementById('status');
+  status.textContent = '接続中...';
   try {
     device = await navigator.bluetooth.requestDevice({
       filters: [{ name: 'J-Maelstrom' }],
@@ -64,56 +28,13 @@ async function connectDevice() {
     const server = await device.gatt.connect();
     const service = await server.getPrimaryService(SERVICE_UUID);
     characteristic = await service.getCharacteristic(CHAR_UUID);
-    document.getElementById('status').textContent = '✅ 接続済み';
+    status.textContent = '✅ 接続成功！ ' + device.name;
+    alert('接続できました！');
   } catch (e) {
-    document.getElementById('status').textContent = '❌ 接続失敗: ' + e.message;
-  }
-}
-
-async function sendCommand(cmd) {
-  if (!characteristic) return alert('先にBluetooth接続してください');
-  try {
-    await characteristic.writeValueWithoutResponse(cmd);
-  } catch (e) {
+    status.textContent = '❌ 失敗: ' + e.message;
     console.error(e);
   }
 }
-
-function sendLevel(lvl) {
-  if (lvl === 1) sendCommand(COMMANDS.level1);
-  else if (lvl === 2) sendCommand(COMMANDS.level2);
-  else if (lvl === 3) sendCommand(COMMANDS.level3);
-  else if (lvl === 4) sendCommand(COMMANDS.level4);
-  else if (lvl === 5) sendCommand(COMMANDS.level5);
-}
-
-function sendStop() {
-  sendCommand(COMMANDS.stop);
-  stopPlayback();
-}
-
-// 10刻みスライダー
-function updateSlider() {
-  const val = document.getElementById('speedSlider').value;
-  document.getElementById('speedValue').textContent = val;
-}
-
-function sendCurrentSlider() {
-  const value = parseInt(document.getElementById('speedSlider').value);
-  // 0-255をコマンドに変換（Intifaceで動く形式に近い形）
-  const cmd = new Uint8Array([0xA0, 0x06, 0x01, 0x00, value, 0x01]);
-  sendCommand(cmd);
-}
-
-// CSV再生
-async function startCSV() {
-  const fileInput = document.getElementById('csvFile');
-  if (!fileInput.files[0]) return alert('CSVファイルを選択してください');
-  if (!characteristic) return alert('Bluetoothに接続してください');
-
-  const text = await fileInput.files[0].text();
-  const lines = text.trim().split('\n');
-  let index = 0;
-  isPlaying = true;
-
-  playbackInterval = setInterval(()
+</script>
+</body>
+</html>
