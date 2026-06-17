@@ -17,11 +17,11 @@
   <div id="status">未接続</div>
 
   <h2>手動コントロール</h2>
-  <button class="level" onclick="sendLevel(1)">レベル 1</button>
+  <button class="level" onclick="sendLevel(1)">レベル 1（遅め）</button>
   <button class="level" onclick="sendLevel(2)">レベル 2</button>
   <button class="level" onclick="sendLevel(3)">レベル 3</button>
   <button class="level" onclick="sendLevel(4)">レベル 4</button>
-  <button class="level" onclick="sendLevel(5)">レベル 5（最大）</button>
+  <button class="level" onclick="sendLevel(5)">レベル 5（最速）</button>
   <button class="stop" onclick="sendStop()">⛔ 停止</button>
 
   <h2>CSV自動再生（ピストンSA対応）</h2>
@@ -31,7 +31,6 @@
   <div id="progress">進捗: 0行目</div>
 
 <script>
-// UUID
 const SERVICE_UUID = '0000ffa0-0000-1000-8000-00805f9b34fb';
 const CHAR_UUID = '0000ffa1-0000-1000-8000-00805f9b34fb';
 
@@ -84,7 +83,7 @@ function sendStop() {
   stopPlayback();
 }
 
-// CSV再生（ピストンSA仕様対応）
+// CSV再生（C列速度をレベルにマッピング）
 async function startCSV() {
   const fileInput = document.getElementById('csvFile');
   if (!fileInput.files[0]) return alert('CSVファイルを選択してください');
@@ -103,23 +102,24 @@ async function startCSV() {
 
     const cols = lines[index].split(',').map(n => parseFloat(n.trim()));
     if (cols.length >= 3) {
-      const time = cols[0];      // A列：時間
-      const position = cols[1];  // B列：ストローク位置 (0-200)
-      const speedRaw = cols[2];  // C列：速度 (0-100)
+      const position = cols[1];   // B列（位置）
+      const speedRaw = cols[2];   // C列（速度 0-100）
 
-      // 速度変換（0-100 → 0-255）
-      let speed = Math.round(speedRaw * 2.55);
-      speed = Math.min(255, Math.max(0, speed));
+      // 速度をレベルに変換（動画のレベル1を基準に調整）
+      let level = 1;
+      if (speedRaw >= 80) level = 5;
+      else if (speedRaw >= 60) level = 4;
+      else if (speedRaw >= 40) level = 3;
+      else if (speedRaw >= 20) level = 2;
+      // 20未満はレベル1（遅め）
 
-      // コマンド送信
-      const cmd = new Uint8Array([0xA0, 0x06, 0x01, 0x00, speed, 0x01]);
-      sendCommand(cmd);
+      sendLevel(level);
 
       document.getElementById('progress').textContent = 
-        `進捗: ${index+1}/${lines.length}行目 (位置:${position} 速度:${speedRaw}→${speed})`;
+        `進捗: ${index+1}/${lines.length}行目 (速度:${speedRaw} → レベル${level})`;
     }
     index++;
-  }, 100); // 0.1秒間隔（A列の時間単位に合わせる）
+  }, 100); // 0.1秒間隔（A列の時間に近づける）
 }
 
 function stopPlayback() {
