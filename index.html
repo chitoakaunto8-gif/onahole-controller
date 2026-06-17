@@ -28,7 +28,8 @@
   <input type="file" id="csvFile" accept=".csv">
   <button onclick="startCSV()">▶️ スタート</button>
   <button onclick="stopPlayback()">⛔ 停止</button>
-  <div id="progress">進捗: 0行目</div>
+  <button onclick="skipLine()">→ スキップ（次の行へ）</button>
+  <div id="progress">進捗: 0行目 / 0秒</div>
 
 <script>
 const SERVICE_UUID = '0000ffa0-0000-1000-8000-00805f9b34fb';
@@ -37,7 +38,9 @@ const CHAR_UUID = '0000ffa1-0000-1000-8000-00805f9b34fb';
 let device = null;
 let characteristic = null;
 let isPlaying = false;
-let playbackInterval = null;
+let playbackTimeout = null;
+let currentIndex = 0;
+let lines = [];
 
 const COMMANDS = {
   stop: new Uint8Array([0xA0, 0x06, 0x00, 0x00, 0x00, 0x01]),
@@ -64,7 +67,7 @@ async function connectDevice() {
 }
 
 async function sendCommand(cmd) {
-  if (!characteristic) return alert('先に接続してください');
+  if (!characteristic) return;
   try {
     await characteristic.writeValueWithoutResponse(cmd);
   } catch (e) {}
@@ -83,48 +86,58 @@ function sendStop() {
   stopPlayback();
 }
 
-// CSV再生（C列速度をレベルにマッピング）
+// CSV再生（時間指定対応）
 async function startCSV() {
   const fileInput = document.getElementById('csvFile');
   if (!fileInput.files[0]) return alert('CSVファイルを選択してください');
   if (!characteristic) return alert('Bluetoothに接続してください');
 
   const text = await fileInput.files[0].text();
-  const lines = text.trim().split('\n');
-  let index = 0;
+  lines = text.trim().split('\n');
+  currentIndex = 0;
   isPlaying = true;
 
-  playbackInterval = setInterval(() => {
-    if (!isPlaying || index >= lines.length) {
-      stopPlayback();
-      return;
-    }
+  playNextLine();
+}
 
-    const cols = lines[index].split(',').map(n => parseFloat(n.trim()));
-    if (cols.length >= 3) {
-      const position = cols[1];   // B列（位置）
-      const speedRaw = cols[2];   // C列（速度 0-100）
+function playNextLine() {
+  if (!isPlaying || currentIndex >= lines.length) {
+    stopPlayback();
+    return;
+  }
 
-      // 速度をレベルに変換（動画のレベル1を基準に調整）
-      let level = 1;
-      if (speedRaw >= 80) level = 5;
-      else if (speedRaw >= 60) level = 4;
-      else if (speedRaw >= 40) level = 3;
-      else if (speedRaw >= 20) level = 2;
-      // 20未満はレベル1（遅め）
+  const cols = lines[currentIndex].split(',').map(n => parseFloat(n.trim()));
+  if (cols.length >= 3) {
+    const timeMs = cols[0] * 100;     // 393 → 39.3秒
+    const speedRaw = cols[2];         // C列：速度 0-100
 
-      sendLevel(level);
+    // 速度をレベルに変換（全体的に遅め）
+    let level = 1;
+    if (speedRaw >= 70) level = 3;
+    else if (speedRaw >= 45) level = 2;
+    // 45未満はレベル1（かなり遅め）
 
-      document.getElementById('progress').textContent = 
-        `進捗: ${index+1}/${lines.length}行目 (速度:${speedRaw} → レベル${level})`;
-    }
-    index++;
-  }, 100); // 0.1秒間隔（A列の時間に近づける）
+    sendLevel(level);
+
+    document.getElementById('progress').textContent = 
+      `進捗: ${currentIndex+1}/${lines.length}行目 (速度:${speedRaw} → レベル${level})`;
+  }
+
+  currentIndex++;
+  // 次の行の時間まで待つ（簡易版：現在は固定間隔で調整）
+  playbackTimeout = setTimeout(playNextLine, 800); // 0.8秒ごとに実行（遅めに調整）
+}
+
+function skipLine() {
+  if (isPlaying) {
+    currentIndex++;
+    document.getElementById('progress').textContent = `スキップ → ${currentIndex+1}行目`;
+  }
 }
 
 function stopPlayback() {
   isPlaying = false;
-  if (playbackInterval) clearInterval(playbackInterval);
+  if (playbackTimeout) clearTimeout(playbackTimeout);
   sendStop();
   document.getElementById('progress').textContent = '停止しました';
 }
